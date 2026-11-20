@@ -1,22 +1,44 @@
+use std::num::Saturating;
+
 use serde::Deserialize;
 use thiserror::Error;
 
+/// Filter possible variants
+///
+/// Let developer define highest filter precedent predicates `and`, `or` and `not`.
+/// If none of them is desired, use `Predicate` variant by default
 #[derive(Deserialize, Debug)]
-pub enum FilterNode {
-    And(Vec<FilterNode>),
-    Or(Vec<FilterNode>),
-    Not(Box<FilterNode>),
-    Predicate(Predicate),
+#[serde(deny_unknown_fields)]
+pub enum FilterNode<T> {
+    /// Attribute "and" must be presented in data to be parsed as `And`
+    #[serde(rename = "and")]
+    And(Vec<FilterNode<T>>),
+
+    /// Attribute "or" must be presebt in data to be parsed as `Or`
+    #[serde(rename = "or")]
+    Or(Vec<FilterNode<T>>),
+
+    /// Attribute "not" must be present in data to be parsed as `Not`
+    #[serde(rename = "not")]
+    Not(Box<FilterNode<T>>),
+
+    /// If none of above is present, predicate struct must match to be parsed as `Predicate`
+    #[serde(untagged)]
+    Predicate(Predicate<T>),
 }
 
 #[derive(Deserialize, Debug)]
-pub struct Predicate {
+#[serde(deny_unknown_fields)]
+pub struct Predicate<T> {
+    /// Field path to extract value to use in filter
     pub(crate) field: String,
-    pub(crate) operator: Operator,
-    pub(crate) value: String,
+
+    /// Condition to be used to filter field value
+    #[serde(flatten)]
+    pub(crate) condition: FilterCondition<T>,
 }
 
-/// `Operator` is a base filter enumerator that list all allowed operations
+/// `FilterCondition` is a base filter enumerator that list all allowed operations
 /// within library.
 ///
 /// Operations considerated are: `eq`, `gt`, `ge`, `lt`, `le` which requires :PartialOrd single values.
@@ -26,50 +48,53 @@ pub struct Predicate {
 /// Operation `is_null` requires value to be nullable
 #[derive(Deserialize, Debug)]
 #[serde(deny_unknown_fields)]
-pub enum Operator {
+#[serde(tag = "operator", content = "value")]
+pub enum FilterCondition<T> {
     /// Requires value to be :PartialEq, such as integers and strings
     #[serde(rename = "eq")]
-    Equals,
+    Equals(T),
 
     /// Requires value to be :PartialOrd
     #[serde(rename = "gt")]
-    Greater,
+    Greater(T),
 
     /// Requires value to be :PartialOrd
     #[serde(rename = "ge")]
-    GreaterOrEquals,
+    GreaterOrEquals(T),
 
     /// Requires value to be :PartialOrd
     #[serde(rename = "lt")]
-    Lesser,
+    Lesser(T),
 
     /// Requires value to be :PartialOrd
     #[serde(rename = "le")]
-    LesserOrEquals,
+    LesserOrEquals(T),
 
     /// Requires value to be :PartialEq
     #[serde(rename = "in")]
-    In,
+    In(Vec<T>),
 
-    /// Requires value to be :PartialEq
+    /// Requires value to be String
     #[serde(rename = "contains")]
-    Contains,
+    Contains(String),
 
-    /// Requires value to be :PartialEq
+    /// Requires value to be String
     #[serde(rename = "starts_with")]
-    StartsWith,
+    StartsWith(String),
 
-    /// Requires value to be :PartialEq
+    /// Requires value to be String
     #[serde(rename = "ends_with")]
-    EndsWith,
+    EndsWith(String),
 
-    /// Requires value to be :PartialOrd
+    /// Requires value to be String
     #[serde(rename = "between")]
-    Between,
+    Between((T, T)),
 
-    /// Requires value to be nullable
     #[serde(rename = "is_null")]
     IsNull,
+
+    #[serde(rename = "is_not_null")]
+    IsNotNull,
 }
 
 #[derive(Error, Debug)]
