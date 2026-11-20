@@ -1,5 +1,3 @@
-use std::num::Saturating;
-
 use serde::Deserialize;
 use thiserror::Error;
 
@@ -95,6 +93,12 @@ pub enum FilterCondition<T> {
 
     #[serde(rename = "is_not_null")]
     IsNotNull,
+}
+
+impl<T: PartialEq> FilterCondition<T> {
+    pub fn eq(field: impl Into<String>, value: Self) -> bool {
+        todo!()
+    }
 }
 
 #[derive(Error, Debug)]
