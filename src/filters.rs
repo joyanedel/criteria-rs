@@ -7,33 +7,33 @@ use thiserror::Error;
 /// If none of them is desired, use `Predicate` variant by default
 #[derive(Deserialize, Debug)]
 #[serde(deny_unknown_fields)]
-pub enum FilterNode<T> {
+pub enum FilterNode {
     /// Attribute "and" must be presented in data to be parsed as `And`
     #[serde(rename = "and")]
-    And(Vec<FilterNode<T>>),
+    And(Vec<FilterNode>),
 
     /// Attribute "or" must be presebt in data to be parsed as `Or`
     #[serde(rename = "or")]
-    Or(Vec<FilterNode<T>>),
+    Or(Vec<FilterNode>),
 
     /// Attribute "not" must be present in data to be parsed as `Not`
     #[serde(rename = "not")]
-    Not(Box<FilterNode<T>>),
+    Not(Box<FilterNode>),
 
     /// If none of above is present, predicate struct must match to be parsed as `Predicate`
     #[serde(untagged)]
-    Predicate(Predicate<T>),
+    Leaf(Predicate),
 }
 
 #[derive(Deserialize, Debug)]
 #[serde(deny_unknown_fields)]
-pub struct Predicate<T> {
+pub struct Predicate {
     /// Field path to extract value to use in filter
     pub(crate) field: String,
 
     /// Condition to be used to filter field value
     #[serde(flatten)]
-    pub(crate) condition: FilterCondition<T>,
+    pub(crate) condition: FilterCondition,
 }
 
 /// `FilterCondition` is a base filter enumerator that list all allowed operations
@@ -47,34 +47,38 @@ pub struct Predicate<T> {
 #[derive(Deserialize, Debug)]
 #[serde(deny_unknown_fields)]
 #[serde(tag = "operator", content = "value")]
-pub enum FilterCondition<T> {
+pub enum FilterCondition {
     /// Requires value to be :PartialEq, such as integers and strings
     #[serde(rename = "eq")]
-    Equals(T),
+    Equals(Literal),
+
+    /// Requires value to be :PartialEq
+    #[serde(rename = "ne")]
+    NotEquals(Literal),
 
     /// Requires value to be :PartialOrd
     #[serde(rename = "gt")]
-    Greater(T),
+    Greater(Literal),
 
     /// Requires value to be :PartialOrd
     #[serde(rename = "ge")]
-    GreaterOrEquals(T),
+    GreaterOrEquals(Literal),
 
     /// Requires value to be :PartialOrd
     #[serde(rename = "lt")]
-    Lesser(T),
+    Lesser(Literal),
 
     /// Requires value to be :PartialOrd
     #[serde(rename = "le")]
-    LesserOrEquals(T),
+    LesserOrEquals(Literal),
 
     /// Requires value to be :PartialEq
     #[serde(rename = "in")]
-    In(Vec<T>),
+    In(Vec<Literal>),
 
     /// Requires value to be String
     #[serde(rename = "contains")]
-    Contains(String),
+    Contains(Literal),
 
     /// Requires value to be String
     #[serde(rename = "starts_with")]
@@ -86,7 +90,7 @@ pub enum FilterCondition<T> {
 
     /// Requires value to be String
     #[serde(rename = "between")]
-    Between((T, T)),
+    Between { min: i64, max: i64 },
 
     #[serde(rename = "is_null")]
     IsNull,
@@ -95,14 +99,17 @@ pub enum FilterCondition<T> {
     IsNotNull,
 }
 
-impl<T: PartialEq> FilterCondition<T> {
-    pub fn eq(field: impl Into<String>, value: Self) -> bool {
-        todo!()
-    }
+#[derive(Deserialize, PartialEq, Debug)]
+#[serde(untagged)]
+pub enum Literal {
+    Int(i64),
+    Str(String),
+    Bool(bool),
+    Array(Vec<Literal>),
 }
 
 #[derive(Error, Debug)]
-pub enum PredicateError {
+pub enum FilterConditionError {
     #[error("value must be of type `string`, got `{0}`")]
     ExpectedString(String),
 
@@ -111,7 +118,4 @@ pub enum PredicateError {
 
     #[error("value must be orderable, got `{0}` which does not implement :PartialOrd")]
     ExpectedPartiallyOrderableValue(String),
-
-    #[error("value must be of type `tuple` and :PartialOrd, got `{0}`")]
-    ExpectedTuple(String),
 }
