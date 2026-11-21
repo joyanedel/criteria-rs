@@ -99,7 +99,7 @@ pub enum FilterCondition {
     IsNotNull,
 }
 
-#[derive(Deserialize, PartialEq, Debug)]
+#[derive(Deserialize, PartialEq, Clone, Debug)]
 #[serde(untagged)]
 pub enum Literal {
     Int(i64),
@@ -108,14 +108,14 @@ pub enum Literal {
     Array(Vec<Literal>),
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, PartialEq, Debug)]
 pub enum FilterConditionError {
-    #[error("value must be of type `string`, got `{0}`")]
-    ExpectedString(String),
+    #[error("value must be of type `string`, got `{0:?}`")]
+    ExpectedString(Literal),
 
-    #[error("value must be of type `array`, got `{0}`")]
-    ExpectedArray(String),
+    #[error("value must be of type `array`, got `{0:?}`")]
+    ExpectedArray(Literal),
 
-    #[error("value must be orderable, got `{0}` which does not implement :PartialOrd")]
-    ExpectedPartiallyOrderableValue(String),
+    #[error("value must be orderable, got `{0:?}` which does not implement :PartialOrd")]
+    ExpectedPartiallyOrderableValue(Literal),
 }

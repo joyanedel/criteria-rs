@@ -1,18 +1,37 @@
 use crate::filters::{FilterCondition, FilterConditionError, Literal};
 
 impl FilterCondition {
-    fn eval(&self, value: Option<&Literal>) -> Result<bool, FilterConditionError> {
+    /// Evaluate a value against `FilterCondition` variant returning `Ok(true)` if value met filter condition and `Ok(false) if not`
+    ///
+    /// Returns `Err(FilterConditionError)` if runtime error occurs related to value types
+    pub fn eval(&self, value: Option<&Literal>) -> Result<bool, FilterConditionError> {
         match (self, value) {
             (Self::Equals(other), Some(val)) => Ok(val == other),
             (Self::NotEquals(other), Some(val)) => Ok(val != other),
-            (Self::Greater(Literal::Int(other)), Some(Literal::Int(val))) => Ok(val > other),
-            (Self::GreaterOrEquals(Literal::Int(other)), Some(Literal::Int(val))) => {
-                Ok(val >= other)
-            }
-            (Self::Lesser(Literal::Int(other)), Some(Literal::Int(val))) => Ok(val < other),
-            (Self::LesserOrEquals(Literal::Int(other)), Some(Literal::Int(val))) => {
-                Ok(val <= other)
-            }
+            (Self::Greater(Literal::Int(other)), Some(val)) => match val {
+                Literal::Int(c) => Ok(c > other),
+                e => Err(FilterConditionError::ExpectedPartiallyOrderableValue(
+                    e.clone(),
+                )),
+            },
+            (Self::GreaterOrEquals(Literal::Int(other)), Some(val)) => match val {
+                Literal::Int(c) => Ok(c >= other),
+                e => Err(FilterConditionError::ExpectedPartiallyOrderableValue(
+                    e.clone(),
+                )),
+            },
+            (Self::Lesser(Literal::Int(other)), Some(val)) => match val {
+                Literal::Int(c) => Ok(c < other),
+                e => Err(FilterConditionError::ExpectedPartiallyOrderableValue(
+                    e.clone(),
+                )),
+            },
+            (Self::LesserOrEquals(Literal::Int(other)), Some(val)) => match val {
+                Literal::Int(c) => Ok(c <= other),
+                e => Err(FilterConditionError::ExpectedPartiallyOrderableValue(
+                    e.clone(),
+                )),
+            },
             (Self::In(array), Some(val)) => match val {
                 Literal::Array(_) => Ok(false),
                 v => Ok(array.contains(v)),
@@ -22,7 +41,12 @@ impl FilterCondition {
             }
             (Self::StartsWith(prefix), Some(Literal::Str(val))) => Ok(val.starts_with(prefix)),
             (Self::EndsWith(suffix), Some(Literal::Str(val))) => Ok(val.ends_with(suffix)),
-            (Self::Between { min, max }, Some(Literal::Int(val))) => Ok(min <= val && val <= max),
+            (Self::Between { min, max }, Some(val)) => match val {
+                Literal::Int(c) => Ok(min <= c && c <= max),
+                e => Err(FilterConditionError::ExpectedPartiallyOrderableValue(
+                    e.clone(),
+                )),
+            },
             (Self::IsNull, _) => Ok(value.is_none()),
             (Self::IsNotNull, _) => Ok(value.is_some()),
             (_, _) => Ok(false),
@@ -32,7 +56,7 @@ impl FilterCondition {
 
 #[cfg(test)]
 mod filter_condition_test_suite {
-    use crate::filters::{FilterCondition, Literal};
+    use crate::filters::{FilterCondition, FilterConditionError, Literal};
     use rstest::rstest;
 
     #[rstest]
@@ -93,6 +117,10 @@ mod filter_condition_test_suite {
         Literal::Str("test_not".to_string()),
         FilterCondition::Equals(Literal::Str("test".to_string()))
     )]
+    #[case::eq_3_different_literals(
+        Literal::Int(5),
+        FilterCondition::Equals(Literal::Str("test".to_string()))
+    )]
     #[case::ne_1(Literal::Int(5), FilterCondition::NotEquals(Literal::Int(5)))]
     #[case::gt_1(Literal::Int(4), FilterCondition::Greater(Literal::Int(5)))]
     #[case::gt_2(Literal::Int(4), FilterCondition::Greater(Literal::Int(8)))]
@@ -129,5 +157,51 @@ mod filter_condition_test_suite {
         let result = sut.eval(Some(value).as_ref());
 
         assert!(result.is_ok_and(|x| !x));
+    }
+
+    #[rstest]
+    #[case::gt_with_string(
+        Literal::Str("test".to_string()),
+        FilterCondition::Greater(Literal::Int(5)),
+        FilterConditionError::ExpectedPartiallyOrderableValue(
+            Literal::Str("test".to_string())
+        ),
+    )]
+    #[case::ge_with_string(
+        Literal::Str("test".to_string()),
+        FilterCondition::GreaterOrEquals(Literal::Int(5)),
+        FilterConditionError::ExpectedPartiallyOrderableValue(
+            Literal::Str("test".to_string())
+        ),
+    )]
+    #[case::lt_with_string(
+        Literal::Str("test".to_string()),
+        FilterCondition::Lesser(Literal::Int(5)),
+        FilterConditionError::ExpectedPartiallyOrderableValue(
+            Literal::Str("test".to_string())
+        ),
+    )]
+    #[case::le_with_string(
+        Literal::Str("test".to_string()),
+        FilterCondition::LesserOrEquals(Literal::Int(5)),
+        FilterConditionError::ExpectedPartiallyOrderableValue(
+            Literal::Str("test".to_string())
+        ),
+    )]
+    #[case::between_with_string(
+        Literal::Str("test".to_string()),
+        FilterCondition::Between { min: 3, max: 7 },
+        FilterConditionError::ExpectedPartiallyOrderableValue(
+            Literal::Str("test".to_string())
+        )
+    )]
+    fn predicate_returns_error(
+        #[case] value: Literal,
+        #[case] sut: FilterCondition,
+        #[case] expected_error: FilterConditionError,
+    ) {
+        let result = sut.eval(Some(value).as_ref());
+
+        assert_eq!(result, Result::Err(expected_error));
     }
 }
