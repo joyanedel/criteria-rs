@@ -14,3 +14,6 @@ toml = { version = "1.2.1", optional = true }
 json = ["dep:serde_json"]
 yaml = ["dep:serde_yaml"]
 toml = ["dep:toml"]
+
+[dev-dependencies]
+rstest = "0.28.0"
